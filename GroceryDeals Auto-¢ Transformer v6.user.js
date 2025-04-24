@@ -6,8 +6,8 @@
 // @match        https://admin.mygrocerydeals.com/admin/tasks/*
 // @grant        none
 // @run-at       document-idle
-// @downloadURL  https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/Auto-¢-Transformer.user.js
-// @updateURL    https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/Auto-¢-Transformer.user.js
+// @downloadURL  https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals%20Auto-¢%20Transformer%20v6.user.js
+// @updateURL    https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals%20Auto-¢%20Transformer%20v6.user.js
 // ==/UserScript==
 
 (function() {
