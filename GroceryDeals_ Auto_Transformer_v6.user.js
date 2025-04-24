@@ -1,13 +1,13 @@
 // ==UserScript==
-// @name         GroceryDeals Auto-¢ Transformer v6
+// @name         GroceryDeals_Auto_Transformer_v6
 // @namespace    http://tampermonkey.net/
 // @version      0.6
 // @description  Convert 0.89 → 89¢, switch Sale Type to Custom Deal, then populate the custom-price field.
 // @match        https://admin.mygrocerydeals.com/admin/tasks/*
 // @grant        none
 // @run-at       document-idle
-// @downloadURL  https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals%20Auto-¢%20Transformer%20v6.user.js
-// @updateURL    https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals%20Auto-¢%20Transformer%20v6.user.js
+// @downloadURL  https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals_Auto_Transformer_v6.user.js
+// @updateURL    https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals_Auto_Transformer_v6.user.js
 // ==/UserScript==
 
 (function() {
