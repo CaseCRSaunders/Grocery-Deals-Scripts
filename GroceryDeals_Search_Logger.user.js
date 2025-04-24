@@ -14,103 +14,147 @@
 (function() {
   'use strict';
 
-  // ————————————— SPA URL-change detection —————————————
+  // —— SPA URL-change detection ——
   function patchHistory(type) {
     const orig = history[type];
     history[type] = function() {
-      const ret = orig.apply(this, arguments);
+      const rv = orig.apply(this, arguments);
       window.dispatchEvent(new Event('locationchange'));
-      return ret;
+      return rv;
     };
   }
   patchHistory('pushState');
   patchHistory('replaceState');
   window.addEventListener('popstate', () => window.dispatchEvent(new Event('locationchange')));
 
-  // ———————— GM storage helpers ————————
-  async function loadTerms() {
-    return await GM_getValue('GDSearchLoggedTerms', []);
+  // —— Configuration ——
+  const FIELD_SELECTOR = 'input[name="query"]';   // your search box
+  const STORAGE_KEY    = 'GDSearchLogV5';          // storage key
+
+  // —— Storage helpers ——
+  async function loadLog() {
+    return await GM_getValue(STORAGE_KEY, []);
   }
-  async function saveTerms(arr) {
-    await GM_setValue('GDSearchLoggedTerms', arr);
+  async function saveLog(arr) {
+    await GM_setValue(STORAGE_KEY, arr);
   }
 
-  // ———————— Hook the search-field logger ————————
-  async function hookSearchLogger() {
-    if (window.__gd_searchLoggerHooked) return;
-    window.__gd_searchLoggerHooked = true;
+  // —— In-memory tracker ——
+  let lastTerm = null;
 
-    const FIELD_SELECTOR = 'input[name="query"]';
+  // —— Log a search term ——
+  async function logSearch(term) {
+    let log = await loadLog();
+    let status;
 
-    function logTerm(raw) {
-      const val = raw.trim();
-      if (!val) return;
-      loadTerms().then(terms => {
-        if (!terms.includes(val)) {
-          terms.push(val);
-          saveTerms(terms);
-          console.log('✅ Logged term:', val);
+    if (lastTerm) {
+      // refinement?
+      if (term.toLowerCase().startsWith(lastTerm.toLowerCase())) {
+        status = 'vague';
+      } else {
+        // chain ended ⇒ finalize previous
+        let prev = log[log.length - 1];
+        if (prev && prev.status !== 'final') {
+          prev.status = 'final';
         }
-      });
+        await saveLog(log);
+        status = 'broad';
+      }
+    } else {
+      status = 'broad';
     }
 
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && e.target.matches(FIELD_SELECTOR)) {
-        logTerm(e.target.value);
-      }
-    });
+    // add new entry
+    const entry = { term, status };
+    log.push(entry);
+    await saveLog(log);
+    console.log('🔍 Logged search:', entry);
 
-    document.addEventListener('blur', e => {
-      if (e.target.matches(FIELD_SELECTOR)) {
-        logTerm(e.target.value);
-      }
-    }, true);
+    lastTerm = term;
   }
 
-  // ———————— Inject a floating “Export” button ————————
+  // —— Handle user pressing Enter or blurring the field ——
+  function onSearchEvent(e) {
+    if (!e.target.matches(FIELD_SELECTOR)) return;
+    const term = e.target.value.trim();
+    if (!term) return;
+    // slight delay so any UI updates settle
+    setTimeout(() => logSearch(term), 50);
+  }
+
+  // —— Hook listeners once ——
+  function hookLogger() {
+    if (window.__gd_searchLoggerV5) return;
+    window.__gd_searchLoggerV5 = true;
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter') onSearchEvent(e);
+    });
+    document.addEventListener('blur', onSearchEvent, true);
+  }
+
+  // —— Export button ——
   function injectExportButton() {
     if (document.getElementById('gd-export-btn')) return;
     const btn = document.createElement('button');
     btn.id = 'gd-export-btn';
-    btn.textContent = 'Export Logged Terms';
+    btn.textContent = 'Export Search Log';
     Object.assign(btn.style, {
-      position:    'fixed',
-      bottom:      '1rem',
-      right:       '50%',
-      padding:     '0.6rem 1.2rem',
-      background:  '#28a745',
-      color:       '#fff',
-      border:      'none',
-      borderRadius:'4px',
-      cursor:      'pointer',
-      zIndex:      9999,
-      fontSize:    '0.9rem',
+      position:     'fixed',
+      bottom:       '1rem',
+      right:        '50%',
+      padding:      '0.6rem 1.2rem',
+      background:   '#007bff',
+      color:        '#fff',
+      border:       'none',
+      borderRadius: '4px',
+      cursor:       'pointer',
+      zIndex:       9999,
     });
-    btn.addEventListener('click', () => {
-      loadTerms().then(terms => {
-        const blob = new Blob([JSON.stringify(terms, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'logged_terms.json';
-        a.click();
-        URL.revokeObjectURL(url);
-      });
+    btn.addEventListener('click', async () => {
+      const log = await loadLog();
+      const blob = new Blob([JSON.stringify(log, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = 'search_log.json';
+      a.click();
+      URL.revokeObjectURL(url);
     });
     document.body.appendChild(btn);
   }
 
-  // ———————— Initialization ————————
+  function removeExportButton() {
+    const btn = document.getElementById('gd-export-btn');
+    if (btn) btn.remove();
+  }
+
+  // —— Finalize the last entry when you leave the search page ——
+  async function finalizeOnExit() {
+    let log = await loadLog();
+    let prev = log[log.length - 1];
+    if (prev && prev.status !== 'final') {
+      prev.status = 'final';
+      await saveLog(log);
+      console.log('🔍 Finalized previous entry as final');
+    }
+    lastTerm = null;
+  }
+
+  // —— Initialization on SPA navigation ——  
   function init() {
     const path = location.pathname;
-    // only on the search page
     if (path.includes('/deal-entry/products/search')) {
-      hookSearchLogger();
+      hookLogger();
       injectExportButton();
+    } else {
+      removeExportButton();
+      finalizeOnExit();
     }
   }
 
   window.addEventListener('locationchange', init);
   init();
-  console.log('⚙️ GroceryDeals Search Logger initialized');
+
+  console.log('⚙️ GroceryDeals Search Logger v1.0 loaded');
 })();
