@@ -9,6 +9,8 @@
 // @downloadURL  https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals_Auto_Transformer_v6.user.js
 // @updateURL    https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals_Auto_Transformer_v6.user.js
 // ==/UserScript==
+alert('🚀 Transformer v7 loaded on ' + location.href);
+
 
 (function() {
   'use strict';
