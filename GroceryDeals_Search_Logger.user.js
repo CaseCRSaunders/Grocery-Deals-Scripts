@@ -1,13 +1,13 @@
 // ==UserScript==
-// @name         GroceryDeals — Search Logger
+// @name         GroceryDeals_Search_Logger
 // @namespace    http://tampermonkey.net/
 // @version      0.1
 // @description  Capture every unique search term and export as JSON.
 // @match        https://admin.mygrocerydeals.com/admin/tasks/*
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @downloadURL  https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals%20—%20Search%20Logger.user.js
-// @updateURL    https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals%20—%20Search%20Logger.user.js
+// @downloadURL  https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals_Search_Logger.user.js
+// @updateURL    https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals_Search_Logger.user.js
 // ==/UserScript==
 
 
