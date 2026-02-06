@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ShopLiftr - Collapsible Left Sidebar (Toggle Button + Hotkey)
-// @downloadURL https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/ShopLiftr%20-%20Collapsible%20Left%20Sidebar%20(Toggle%20Button%20+%20Hotkey)-1.1.0.user.js
-// @updateURL   https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/ShopLiftr%20-%20Collapsible%20Left%20Sidebar%20(Toggle%20Button%20+%20Hotkey)-1.1.0.user.js
+// @downloadURL https://github.com/CaseCRSaunders/Grocery-Deals-Scripts/raw/refs/heads/main/ShopLiftr%20-%20Collapsible%20Left%20Sidebar%20(Toggle%20Button%20+%20Hotkey)-1.1.0.user.js
+// @updateURL   https://github.com/CaseCRSaunders/Grocery-Deals-Scripts/raw/refs/heads/main/ShopLiftr%20-%20Collapsible%20Left%20Sidebar%20(Toggle%20Button%20+%20Hotkey)-1.1.0.user.js
 // @namespace    https://admin.mygrocerydeals.com/
 // @version      1.1.0
 // @description  Makes the left mat-sidenav collapsible with a floating toggle button and Alt+S hotkey.
