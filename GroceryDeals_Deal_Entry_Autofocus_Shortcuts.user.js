@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Deal Entry — Autofocus + Keyboard Shortcuts
 // @namespace    http://tampermonkey.net/
-// @version      4.1
+// @version      4.2
 // @description  Autofocuses price field on product select and restores Ctrl+3/4/5/6/8
 // @author       CaseCRSaunders
 // @match        https://admin.mygrocerydeals.com/tasks/*/deal-entry/*
@@ -83,6 +83,44 @@
 
   // Catches browser back/forward navigation
   window.addEventListener('popstate', () => onRouteChange(location.href));
+
+  // ── Sale type change → re-focus price field ──────────────────────────────
+  // Angular Material autocomplete doesn't fire a native 'change' event when
+  // an option is selected.  Instead we:
+  //   1. Track when the Sale Type input gains focus.
+  //   2. Intercept the mat-option click in the CDK overlay while it's active.
+  //   3. Also catch keyboard selection (Enter / Tab on the input).
+  // In all cases we wait a tick for Angular to swap the price field in, then
+  // focus it via the same SHORTCUTS['4'] chain used by Ctrl+4.
+
+  let saleTypeWasActive = false;
+
+  // Mark active when Sale Type input is focused
+  document.addEventListener('focusin', (e) => {
+    if (e.target && e.target.placeholder === 'Sale Type') {
+      saleTypeWasActive = true;
+    }
+  }, true);
+
+  // Mousedown (not click) fires before the overlay closes, which is when the
+  // mat-option element is still in the DOM.
+  document.addEventListener('mousedown', (e) => {
+    if (!saleTypeWasActive) return;
+    if (!e.target.closest('mat-option')) return;
+    saleTypeWasActive = false;
+    // 250 ms lets Angular re-render the correct price input for the chosen type
+    setTimeout(() => waitAndFocus(SHORTCUTS['4']), 250);
+  }, true);
+
+  // Keyboard selection: Enter confirms the highlighted option; Tab moves on
+  document.addEventListener('keydown', (e) => {
+    if (!saleTypeWasActive) return;
+    if (e.target.placeholder !== 'Sale Type') return;
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      saleTypeWasActive = false;
+      setTimeout(() => waitAndFocus(SHORTCUTS['4']), 250);
+    }
+  }, true);
 
   // ── Initial load (handles hard refresh on a product URL) ─────────────────
 

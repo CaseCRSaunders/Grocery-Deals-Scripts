@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GroceryDeals — Deal Review</title>
+  <link rel="stylesheet" href="review.css">
+</head>
+<body>
+
+  <header>
+    <div class="header-left">
+      <h1>Deal Review</h1>
+      <span id="deal-count" class="count-badge"></span>
+    </div>
+    <div class="header-actions">
+      <button id="btn-export-csv" class="btn secondary">⬇ Export CSV</button>
+      <button id="btn-clear-flagged" class="btn secondary">Remove Flagged</button>
+      <button id="btn-confirm-all" class="btn primary">✓ Confirm All &amp; Close</button>
+    </div>
+  </header>
+
+  <!-- Legend -->
+  <div class="legend">
+    <span class="flag review">⚠ Needs review</span>
+    <span class="flag uom">📐 UOM check</span>
+    <span class="flag limit">⚠ Limit unclear</span>
+    <span class="flag seasonal">🚫 Seasonal — excluded</span>
+  </div>
+
+  <!-- Store sections -->
+  <div id="stores-container"></div>
+
+  <script src="review.js"></script>
+</body>
+</html>

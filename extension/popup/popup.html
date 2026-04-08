@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GroceryDeals Automation</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+  <header>
+    <h1>GroceryDeals</h1>
+    <span id="state-badge" class="badge idle">Idle</span>
+  </header>
+
+  <!-- Connection status -->
+  <section class="status-row">
+    <div class="status-item">
+      <span class="dot" id="dot-portal"></span>
+      <span>Portal tab</span>
+    </div>
+    <div class="status-item">
+      <span class="dot" id="dot-flyer"></span>
+      <span>Flyer tab</span>
+    </div>
+  </section>
+
+  <!-- Flyer tab controls -->
+  <section class="card">
+    <p class="hint">Navigate to the correct location's flyer in Chrome, then click below.</p>
+    <button id="btn-set-flyer" class="btn secondary">Set Current Tab as Flyer</button>
+    <div id="flyer-url" class="flyer-url hidden"></div>
+  </section>
+
+  <!-- Flyer parsing -->
+  <section class="card">
+    <button id="btn-parse" class="btn primary" disabled>Parse Flyer</button>
+    <div id="parse-status" class="hint hidden"></div>
+  </section>
+
+  <!-- Pause/review banner (hidden until needed) -->
+  <section id="review-banner" class="banner warning hidden">
+    <strong>⏸ Paused — needs review</strong>
+    <p id="review-reason"></p>
+    <button id="btn-resume" class="btn primary small">Resume</button>
+  </section>
+
+  <!-- Queue -->
+  <section class="card">
+    <div class="section-header">
+      <h2>Queue</h2>
+      <button id="btn-clear-queue" class="btn danger small">Clear</button>
+    </div>
+    <div id="queue-list">
+      <p class="empty-msg">No stores queued yet.</p>
+    </div>
+  </section>
+
+  <!-- Review / export -->
+  <section class="controls">
+    <button id="btn-review" class="btn secondary" disabled>🔍 Review Deals</button>
+    <button id="btn-export-csv" class="btn secondary" disabled>⬇ CSV</button>
+  </section>
+
+  <!-- Automation controls -->
+  <section class="controls">
+    <button id="btn-start" class="btn primary" disabled>▶ Start Automation</button>
+    <button id="btn-pause" class="btn secondary" disabled>⏸ Pause</button>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>

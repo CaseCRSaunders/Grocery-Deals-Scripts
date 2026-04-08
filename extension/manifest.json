@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "GroceryDeals Entry Automation",
+  "version": "0.1.0",
+  "description": "Parses grocery store flyers and automates deal entry in the ShopLiftr admin portal.",
+
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "storage",
+    "scripting",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "https://admin.mygrocerydeals.com/*",
+    "<all_urls>"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://admin.mygrocerydeals.com/*"],
+      "js": ["content/portal.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "GroceryDeals Automation"
+  }
+}
