@@ -39,7 +39,7 @@
     .trim();
 
   // SLASH banners → use "QTY/$PRICE" Custom Deal
-  const SLASH_BANNERS = new Set(['hannaford','meijer','qfc','sendiks food market','harris teeter','giant','fresco y mas', 'green valley marketplace', 'food city', 'dierbergs', 'hy vee' ,'buschs', 'pricerite', 'shop n save', 'brookshire', 'kroger', 'dillons', 'frys','stater bros.', 'festival foods', 'food 4 less', 'marcs', 'save mart', 'marianos', 'sunset foods', 'save-a-lot', 'food lion', 'market square', 'rouses market', 'western beef', 'foodtown', 'kings food markets', 'price chopper', 'green valley marketplace', 'giant eagle','ralphs'].map(normalize));
+  const SLASH_BANNERS = new Set(['fiesta mart','hannaford','meijer','qfc','sendiks food market','harris teeter','giant','fresco y mas', 'green valley marketplace', 'food city', 'dierbergs', 'hy vee' ,'buschs', 'pricerite', 'shop n save', 'brookshire', 'kroger', 'dillons', 'frys','stater bros.', 'festival foods', 'food 4 less', 'marcs', 'save mart', 'marianos', 'sunset foods', 'save-a-lot', 'food lion', 'market square', 'rouses market', 'western beef', 'foodtown', 'kings food markets', 'price chopper', 'green valley marketplace', 'giant eagle','ralphs'].map(normalize));
 
   const SEL = {
     storeInfo: 'mgd-toolbar-info',
