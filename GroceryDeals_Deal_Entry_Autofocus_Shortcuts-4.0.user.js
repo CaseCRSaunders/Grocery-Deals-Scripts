@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Deal Entry — Autofocus + Keyboard Shortcuts
 // @namespace    http://tampermonkey.net/
-// @version      4.0
+// @version      4.1
 // @description  Autofocuses price field on product select and restores Ctrl+3/4/5/6/8
 // @author       CaseCRSaunders
 // @match        https://admin.mygrocerydeals.com/tasks/*/deal-entry/*
@@ -40,7 +40,10 @@
 
   const SHORTCUTS = {
     '3': () => focusByPlaceholder('Sale Type'),
-    '4': () => focusById('salePriceDollarAmount'),
+    '4': () => focusById('salePriceDollarAmount')
+          || focusById('salePriceCustomPrice')
+          || focusById('salePriceMultiBuy')
+          || focusById('salePricePercentage'),
     '5': () => focusById('saleQuantity'),
     '6': () => focusByPlaceholder('Unit of Measure'),
     '8': () => focusById('limit'),
