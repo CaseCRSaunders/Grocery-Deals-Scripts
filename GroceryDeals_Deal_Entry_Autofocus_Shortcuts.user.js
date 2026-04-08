@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Deal Entry — Autofocus + Keyboard Shortcuts
 // @namespace    http://tampermonkey.net/
-// @version      4.2
+// @version      4.3
 // @description  Autofocuses price field on product select and restores Ctrl+3/4/5/6/8
 // @author       CaseCRSaunders
 // @match        https://admin.mygrocerydeals.com/tasks/*/deal-entry/*
@@ -36,10 +36,26 @@
     obs.observe(document.body, { childList: true, subtree: true });
   }
 
+  // ── Sale type detection helper ────────────────────────────────────────────
+  // Works for both mat-select (no input placeholder) and mat-autocomplete.
+
+  function isSaleTypeEl(el) {
+    if (!el) return false;
+    if (el.placeholder === 'Sale Type') return true;
+    // mat-select: focus lands on the host element; check its parent form-field label
+    const field = el.closest('mat-form-field');
+    if (field) {
+      const label = field.querySelector('mat-label, label');
+      if (label && /sale\s*type/i.test(label.textContent)) return true;
+    }
+    return false;
+  }
+
   // ── Shortcut map ─────────────────────────────────────────────────────────
 
   const SHORTCUTS = {
-    '3': () => focusByPlaceholder('Sale Type'),
+    // Ctrl+3 explicitly marks Sale Type as active so the change handler fires
+    '3': () => { saleTypeWasActive = true; return focusByPlaceholder('Sale Type'); },
     '4': () => focusById('salePriceDollarAmount')
           || focusById('salePriceCustomPrice')
           || focusById('salePriceMultiBuy')
@@ -85,40 +101,39 @@
   window.addEventListener('popstate', () => onRouteChange(location.href));
 
   // ── Sale type change → re-focus price field ──────────────────────────────
-  // Angular Material autocomplete doesn't fire a native 'change' event when
-  // an option is selected.  Instead we:
-  //   1. Track when the Sale Type input gains focus.
-  //   2. Intercept the mat-option click in the CDK overlay while it's active.
-  //   3. Also catch keyboard selection (Enter / Tab on the input).
-  // In all cases we wait a tick for Angular to swap the price field in, then
-  // focus it via the same SHORTCUTS['4'] chain used by Ctrl+4.
+  // Angular Material mat-select doesn't focus an <input> — focus lands on the
+  // host element.  We detect the Sale Type field via label text as well as
+  // placeholder, track it as active, then intercept the mat-option selection
+  // in the CDK overlay.
 
   let saleTypeWasActive = false;
 
-  // Mark active when Sale Type input is focused
+  // Set active when the Sale Type field (or any child) is focused.
+  // Clear it when focus moves to any real form element that isn't the overlay.
   document.addEventListener('focusin', (e) => {
-    if (e.target && e.target.placeholder === 'Sale Type') {
+    if (isSaleTypeEl(e.target)) {
       saleTypeWasActive = true;
+    } else if (!e.target.closest('.cdk-overlay-container')) {
+      saleTypeWasActive = false;
     }
   }, true);
 
-  // Mousedown (not click) fires before the overlay closes, which is when the
-  // mat-option element is still in the DOM.
+  // mousedown fires before the overlay closes — mat-option is still in the DOM.
+  // 300 ms gives Angular time to swap in the correct price input for the new type.
   document.addEventListener('mousedown', (e) => {
     if (!saleTypeWasActive) return;
     if (!e.target.closest('mat-option')) return;
     saleTypeWasActive = false;
-    // 250 ms lets Angular re-render the correct price input for the chosen type
-    setTimeout(() => waitAndFocus(SHORTCUTS['4']), 250);
+    setTimeout(() => waitAndFocus(SHORTCUTS['4']), 300);
   }, true);
 
-  // Keyboard selection: Enter confirms the highlighted option; Tab moves on
+  // Keyboard selection: Enter / Tab on the Sale Type input confirms the choice.
   document.addEventListener('keydown', (e) => {
     if (!saleTypeWasActive) return;
-    if (e.target.placeholder !== 'Sale Type') return;
+    if (!isSaleTypeEl(e.target)) return;
     if (e.key === 'Enter' || e.key === 'Tab') {
       saleTypeWasActive = false;
-      setTimeout(() => waitAndFocus(SHORTCUTS['4']), 250);
+      setTimeout(() => waitAndFocus(SHORTCUTS['4']), 300);
     }
   }, true);
 
