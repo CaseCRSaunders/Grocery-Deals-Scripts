@@ -6,8 +6,8 @@
 // @author       CaseCRSaunders
 // @match        https://admin.mygrocerydeals.com/tasks/*/deal-entry/*
 // @grant        none
-// @updateURL    https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals_Deal_Entry_Autofocus_Shortcuts-4.0.user.js
-// @downloadURL  https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals_Deal_Entry_Autofocus_Shortcuts-4.0.user.js
+// @updateURL    https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals_Deal_Entry_Autofocus_Shortcuts.user.js
+// @downloadURL  https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals_Deal_Entry_Autofocus_Shortcuts.user.js
 // ==/UserScript==
 
 (function () {
