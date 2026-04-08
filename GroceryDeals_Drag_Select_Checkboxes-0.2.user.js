@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         GroceryDeals_Drag_Select_Checkboxes
 // @namespace    https://github.com/CaseCRSaunders/Grocery-Deals-Scripts
-// @version      0.3
-// @description  Hold Shift + drag to select multiple deal‐review checkboxes at once (SPA‐aware).
+// @version      0.4
+// @description  Hold Shift + drag to select/deselect multiple deal-review checkboxes at once (SPA-aware & Angular-friendly).
 // @author       CaseCRSaunders
 // @homepageURL  https://github.com/CaseCRSaunders/Grocery-Deals-Scripts
 // @supportURL   https://github.com/CaseCRSaunders/Grocery-Deals-Scripts/issues
 // @downloadURL  https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals_Drag_Select_Checkboxes.user.js
 // @updateURL    https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/GroceryDeals_Drag_Select_Checkboxes.user.js
-// @match        https://admin.mygrocerydeals.com/admin/tasks/*/deal-entry/deals/list*
+// @match        https://admin.mygrocerydeals.com/tasks/*/deal-entry/deals/list*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
@@ -50,7 +50,7 @@
   }
 
   function onMouseDown(e) {
-    if (e.button !== 0 || !e.shiftKey) return;  // only Shift + left‐click
+    if (e.button !== 0 || !e.shiftKey) return;  // only Shift + left-click
     startX = e.pageX;
     startY = e.pageY;
     marquee = createMarquee();
@@ -92,9 +92,7 @@
         r.top    < selRect.bottom &&
         r.bottom > selRect.top
       ) {
-        // Use click() so Angular's change detection fires — setting .checked
-        // directly bypasses the framework and the selection gets reset.
-        if (!cb.checked) cb.click();
+        cb.click();  // toggles on/off and triggers Angular's change detection
       }
     });
 
@@ -111,8 +109,8 @@
   }
 
   // ——— Reliable SPA re-init via MutationObserver ———
-  // locationchange can race with Angular's router; watching for mat-rows
-  // appearing in the DOM is more dependable.
+  // locationchange can race with Angular's router; watching for DOM changes
+  // ensures we re-attach once Angular finishes rendering the list.
   let rowObserverDebounce = null;
   const rowObserver = new MutationObserver(() => {
     clearTimeout(rowObserverDebounce);
@@ -124,5 +122,4 @@
   window.addEventListener('locationchange', init);
   init();
 
-  console.log('🛠️ GroceryDeals Drag-Select Script loaded');
 })();
