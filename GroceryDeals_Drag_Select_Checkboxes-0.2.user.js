@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GroceryDeals_Drag_Select_Checkboxes
 // @namespace    https://github.com/CaseCRSaunders/Grocery-Deals-Scripts
-// @version      0.2
+// @version      0.3
 // @description  Hold Shift + drag to select multiple deal‐review checkboxes at once (SPA‐aware).
 // @author       CaseCRSaunders
 // @homepageURL  https://github.com/CaseCRSaunders/Grocery-Deals-Scripts
@@ -92,7 +92,9 @@
         r.top    < selRect.bottom &&
         r.bottom > selRect.top
       ) {
-        cb.checked = true;
+        // Use click() so Angular's change detection fires — setting .checked
+        // directly bypasses the framework and the selection gets reset.
+        if (!cb.checked) cb.click();
       }
     });
 
@@ -101,17 +103,24 @@
   }
 
   function init() {
-    // detach in case of re-init
     document.removeEventListener('mousedown', onMouseDown);
 
     if (location.pathname.includes('/deal-entry/deals/list')) {
       document.addEventListener('mousedown', onMouseDown);
-      console.log('📦 Drag-Select initialized on deal-review list');
-    } else {
-      console.log('📦 Drag-Select inactive on this page');
     }
   }
 
+  // ——— Reliable SPA re-init via MutationObserver ———
+  // locationchange can race with Angular's router; watching for mat-rows
+  // appearing in the DOM is more dependable.
+  let rowObserverDebounce = null;
+  const rowObserver = new MutationObserver(() => {
+    clearTimeout(rowObserverDebounce);
+    rowObserverDebounce = setTimeout(init, 150);
+  });
+  rowObserver.observe(document.body, { childList: true, subtree: true });
+
+  // Keep locationchange as a backup
   window.addEventListener('locationchange', init);
   init();
 
