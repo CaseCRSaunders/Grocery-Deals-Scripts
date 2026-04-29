@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         MGD Deal List Paginator
 // @namespace    http://tampermonkey.net/
-// @version      2.2
+// @version      2.3
 // @description  Paginates the deals list on admin.mygrocerydeals.com by injecting
 //               page/size parameters into the search API POST body so the server
 //               returns only one page of results, reducing memory and render time.
 // @author       Memory Monitor
 // @match        https://admin.mygrocerydeals.com/*
+// @updateURL    https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/deal-list-paginator.user.js
+// @downloadURL  https://raw.githubusercontent.com/CaseCRSaunders/Grocery-Deals-Scripts/main/deal-list-paginator.user.js
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
