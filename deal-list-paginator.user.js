@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MGD Deal List Paginator
 // @namespace    http://tampermonkey.net/
-// @version      2.5
+// @version      2.6
 // @description  Paginates the deals list on admin.mygrocerydeals.com by injecting
 //               page/size parameters into the search API POST body so the server
 //               returns only one page of results, reducing memory and render time.
@@ -414,6 +414,18 @@
     }));
 
     document.body.appendChild(ui);
+
+    // Clamp saved position to the current viewport now that the element has
+    // rendered dimensions. Handles zoom changes between sessions — a position
+    // saved at 75% zoom may be off-screen at 100% zoom.
+    if (savedPos) {
+      const clamped = clampPos(savedPos.x, savedPos.y, ui.offsetWidth, ui.offsetHeight);
+      ui.style.left = clamped.x + 'px';
+      ui.style.top  = clamped.y + 'px';
+      if (clamped.x !== savedPos.x || clamped.y !== savedPos.y) {
+        savePos(clamped.x, clamped.y);
+      }
+    }
 
     // ── Drag to move ────────────────────────────────────────────────────────
     // All drag events are scoped to the grip handle so they never interfere
