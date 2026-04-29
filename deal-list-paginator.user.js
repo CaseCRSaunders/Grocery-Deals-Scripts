@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MGD Deal List Paginator
 // @namespace    http://tampermonkey.net/
-// @version      2.7
+// @version      2.8
 // @description  Paginates the deals list on admin.mygrocerydeals.com by injecting
 //               page/size parameters into the search API POST body so the server
 //               returns only one page of results, reducing memory and render time.
@@ -53,8 +53,9 @@
         page:     s.page     ?? 0,
         total:    s.total    ?? null,
         pageSize: s.pageSize ?? CFG.defaultPageSize,
+        showAll:  s.showAll  ?? false,
       };
-    } catch (e) { return { page: 0, total: null, pageSize: CFG.defaultPageSize }; }
+    } catch (e) { return { page: 0, total: null, pageSize: CFG.defaultPageSize, showAll: false }; }
   }
 
   function saveState(s) {
@@ -80,7 +81,7 @@
   // Modifies the JSON POST body to request only one page of results.
   // The API uses Elasticsearch-style pagination: `from` (item offset) + `size`.
   // We only touch those two fields and leave everything else untouched.
-  function injectPagination(bodyStr, page, pageSize) {
+  function injectPagination(bodyStr, page, pageSize, showAll) {
     let body;
     try { body = JSON.parse(bodyStr); }
     catch (e) {
@@ -96,6 +97,18 @@
         console.log('[DPL] Skipping count-only request (size=' + existingSize + ')');
       }
       return bodyStr;
+    }
+
+    if (showAll) {
+      // Show All mode — fetch every deal so Angular's client-side filter
+      // works across the full dataset. Use the known total as the size so
+      // we don't over-request; fall back to 2000 if total isn't known yet.
+      const allSize = loadState().total ?? 2000;
+      if ('from' in body) { body.from = 0; body.size = allSize; }
+      else if ('size' in body)  body.size  = allSize;
+      else if ('limit' in body) body.limit = allSize;
+      if (CFG.discoveryMode) console.log('[DPL] Show All — requesting', allSize, 'deals');
+      return JSON.stringify(body);
     }
 
     // The API uses `from` (item offset) + `size` (page size).
@@ -180,13 +193,13 @@
         console.log('[DPL] XHR intercepted:', _url, '— requesting page', state.page);
       }
 
-      // Modify the request body to ask the server for only our page
+      // Modify the request body to ask the server for only our page (or all)
       let modifiedBody = body;
       if (typeof body === 'string' && body.length > 0) {
-        modifiedBody = injectPagination(body, state.page, state.pageSize);
+        modifiedBody = injectPagination(body, state.page, state.pageSize, state.showAll);
       } else if (body && typeof body === 'object' && !(body instanceof FormData)) {
         try {
-          modifiedBody = injectPagination(JSON.stringify(body), state.page, state.pageSize);
+          modifiedBody = injectPagination(JSON.stringify(body), state.page, state.pageSize, state.showAll);
         } catch (e) { /* leave as-is */ }
       }
 
@@ -218,6 +231,7 @@
         saveState({
           page:     prevState.page,
           pageSize: prevState.pageSize,
+          showAll:  prevState.showAll,
           total:    total !== null ? total : prevState.total,
         });
         setTimeout(buildUI, 0);
@@ -247,7 +261,7 @@
 
     let body = (init && init.body) || null;
     if (typeof body === 'string' && body.length > 0) {
-      body = injectPagination(body, state.page, state.pageSize);
+      body = injectPagination(body, state.page, state.pageSize, state.showAll);
       init = Object.assign({}, init, { body });
     }
 
@@ -266,7 +280,7 @@
     const total = findTotal(data);
     if (CFG.discoveryMode) console.log('[DPL] Fetch — total count detected:', total);
     const prevState = loadState();
-    saveState({ page: prevState.page, pageSize: prevState.pageSize, total: total !== null ? total : prevState.total });
+    saveState({ page: prevState.page, pageSize: prevState.pageSize, showAll: prevState.showAll, total: total !== null ? total : prevState.total });
     setTimeout(buildUI, 0);
 
     // Return the response unchanged — the server already sliced the data
@@ -312,6 +326,7 @@
     const page       = state.page;
     const pageSize   = state.pageSize;
     const total      = state.total;
+    const showAll    = state.showAll;
     const totalPages = total !== null ? Math.ceil(total / pageSize) : null;
     const start      = page * pageSize + 1;
     const end        = total !== null ? Math.min((page + 1) * pageSize, total) : (page + 1) * pageSize;
@@ -342,11 +357,12 @@
       ]).join(';');
     }
 
-    function btn(label, disabled, onClick) {
+    function btn(label, disabled, onClick, accent) {
       const b = document.createElement('button');
       b.textContent = label;
       b.style.cssText = [
-        'background:#0f3460', 'color:#7eb8f7', 'border:1px solid #1a5276',
+        accent ? 'background:#0d4a3a;color:#6ee7b7;border:1px solid #0f6b52'
+               : 'background:#0f3460;color:#7eb8f7;border:1px solid #1a5276',
         'border-radius:4px', 'padding:3px 10px', 'font-size:11px', 'cursor:pointer',
         'font-family:inherit', 'white-space:nowrap',
         disabled ? 'opacity:0.35;cursor:default' : '',
@@ -363,14 +379,13 @@
       return s;
     }
 
-    const rangeLabel = total !== null
-      ? start + '–' + end + ' of ' + total + ' deals'
-      : 'Page ' + (page + 1) + ' — loading total…';
-    const pageLabel = totalPages !== null
-      ? 'Page ' + (page + 1) + ' / ' + totalPages
-      : 'Page ' + (page + 1);
+    function divider() {
+      const d = document.createElement('span');
+      d.style.cssText = 'width:1px;height:16px;background:#0f3460;flex-shrink:0';
+      return d;
+    }
 
-    // ── Drag handle (prepended so it's the leftmost element) ────────────────
+    // ── Drag handle ─────────────────────────────────────────────────────────
     const grip = document.createElement('span');
     grip.title = 'Drag to move';
     grip.textContent = '⠿';
@@ -380,42 +395,63 @@
     ].join(';');
     ui.appendChild(grip);
 
-    ui.appendChild(btn('← Prev', page === 0, function () { goToPage(page - 1); }));
-    ui.appendChild(txt(rangeLabel));
-    ui.appendChild(txt(pageLabel, '#7eb8f7'));
-    ui.appendChild(btn('Next →', atLastPage, function () { goToPage(page + 1); }));
+    if (showAll) {
+      // ── Show All mode ────────────────────────────────────────────────────
+      const label = total !== null
+        ? 'Showing all ' + total + ' deals — filter works across everything'
+        : 'Loading all deals…';
+      ui.appendChild(txt(label, '#6ee7b7'));
+      ui.appendChild(divider());
+      ui.appendChild(btn('← Paginate', false, function () {
+        saveState({ page: 0, pageSize: state.pageSize, showAll: false, total: state.total });
+        window.location.reload();
+      }));
+    } else {
+      // ── Paginated mode ───────────────────────────────────────────────────
+      const rangeLabel = total !== null
+        ? start + '–' + end + ' of ' + total + ' deals'
+        : 'Page ' + (page + 1) + ' — loading total…';
+      const pageLabel = totalPages !== null
+        ? 'Page ' + (page + 1) + ' / ' + totalPages
+        : 'Page ' + (page + 1);
 
-    // ── Page-size selector ──────────────────────────────────────────────────
-    const divider1 = document.createElement('span');
-    divider1.style.cssText = 'width:1px;height:16px;background:#0f3460;flex-shrink:0';
-    ui.appendChild(divider1);
+      ui.appendChild(btn('← Prev', page === 0, function () { goToPage(page - 1); }));
+      ui.appendChild(txt(rangeLabel));
+      ui.appendChild(txt(pageLabel, '#7eb8f7'));
+      ui.appendChild(btn('Next →', atLastPage, function () { goToPage(page + 1); }));
+      ui.appendChild(divider());
 
-    const sel = document.createElement('select');
-    sel.title = 'Deals per page';
-    sel.style.cssText = [
-      'background:#0f3460', 'color:#7eb8f7', 'border:1px solid #1a5276',
-      'border-radius:4px', 'padding:3px 6px', 'font-size:11px', 'cursor:pointer',
-      'font-family:inherit',
-    ].join(';');
-    CFG.pageSizeOptions.forEach(function (n) {
-      const opt = document.createElement('option');
-      opt.value = n;
-      opt.textContent = n + ' / page';
-      if (n === pageSize) opt.selected = true;
-      sel.appendChild(opt);
-    });
-    sel.addEventListener('change', function () {
-      const newSize = parseInt(sel.value, 10);
-      saveState({ page: 0, pageSize: newSize, total: state.total });
-      window.location.reload();
-    });
-    ui.appendChild(sel);
+      // Page-size selector
+      const sel = document.createElement('select');
+      sel.title = 'Deals per page';
+      sel.style.cssText = [
+        'background:#0f3460', 'color:#7eb8f7', 'border:1px solid #1a5276',
+        'border-radius:4px', 'padding:3px 6px', 'font-size:11px', 'cursor:pointer',
+        'font-family:inherit',
+      ].join(';');
+      CFG.pageSizeOptions.forEach(function (n) {
+        const opt = document.createElement('option');
+        opt.value = n;
+        opt.textContent = n + ' / page';
+        if (n === pageSize) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', function () {
+        saveState({ page: 0, pageSize: parseInt(sel.value, 10), showAll: false, total: state.total });
+        window.location.reload();
+      });
+      ui.appendChild(sel);
+      ui.appendChild(divider());
 
-    // ── Divider + Refresh ───────────────────────────────────────────────────
-    const divider2 = document.createElement('span');
-    divider2.style.cssText = 'width:1px;height:16px;background:#0f3460;flex-shrink:0';
-    ui.appendChild(divider2);
+      // Show All toggle
+      ui.appendChild(btn('⊞ Show All', false, function () {
+        saveState({ page: 0, pageSize: state.pageSize, showAll: true, total: state.total });
+        window.location.reload();
+      }, true /* accent */));
+    }
 
+    // ── Refresh (always shown) ───────────────────────────────────────────────
+    ui.appendChild(divider());
     ui.appendChild(btn('↺ Refresh', false, function () {
       clearState();
       window.location.reload();
@@ -483,8 +519,7 @@
 
   function goToPage(newPage) {
     const state = loadState();
-    state.page = newPage;
-    saveState(state);
+    saveState({ page: newPage, pageSize: state.pageSize, showAll: false, total: state.total });
     window.location.reload();
   }
 
