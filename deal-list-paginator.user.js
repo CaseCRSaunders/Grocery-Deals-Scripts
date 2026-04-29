@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MGD Deal List Paginator
 // @namespace    http://tampermonkey.net/
-// @version      2.6
+// @version      2.7
 // @description  Paginates the deals list on admin.mygrocerydeals.com by injecting
 //               page/size parameters into the search API POST body so the server
 //               returns only one page of results, reducing memory and render time.
@@ -31,7 +31,15 @@
     // Dot-path to the total-count field in the response JSON.
     // Leave empty to auto-detect from common field names.
     totalPath:    '',
-    discoveryMode: true,
+    discoveryMode: false,
+    // ── Memory warning ───────────────────────────────────────────────────────
+    // Heap usage (MB) at which the warning badge appears. Tune this down if
+    // you're seeing slowdowns before it triggers, up if it's too noisy.
+    memWarnMB:       120,
+    // How often to check memory (ms).
+    memCheckMs:      60_000,
+    // How long the warning stays dismissed after clicking ✕ (ms).
+    memSnoozeMs:     10 * 60_000,
   };
 
   // ── STATE ─────────────────────────────────────────────────────────────────
@@ -512,6 +520,95 @@
     document.addEventListener('DOMContentLoaded', function () { setTimeout(onRouteChange, 500); });
   } else {
     setTimeout(onRouteChange, 500);
+  }
+
+  // ── MEMORY WARNING ────────────────────────────────────────────────────────
+  // Runs site-wide (not just on deal routes). Checks JS heap usage every
+  // CFG.memCheckMs and shows a badge when it exceeds CFG.memWarnMB.
+  // A page reload clears all accumulated Angular/Zone.js state and is the
+  // most effective mitigation until the root cause is fixed in the app.
+
+  let _memSnoozedUntil = 0;
+
+  function memUsedMB() {
+    if (!performance.memory) return 0;
+    return Math.round(performance.memory.usedJSHeapSize / 1048576);
+  }
+
+  function showMemWarning(usedMB) {
+    if (Date.now() < _memSnoozedUntil) return; // user dismissed recently
+    if (document.getElementById('mgd-mem-warn')) return; // already showing
+
+    const warn = document.createElement('div');
+    warn.id = 'mgd-mem-warn';
+    warn.style.cssText = [
+      'position:fixed', 'bottom:20px', 'left:50%', 'transform:translateX(-50%)',
+      'background:#2a1500', 'border:1px solid #f59e0b', 'border-radius:8px',
+      'padding:8px 14px', 'display:flex', 'align-items:center', 'gap:10px',
+      'z-index:2147483647',
+      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+      'font-size:12px', 'color:#fde68a', 'box-shadow:0 4px 24px rgba(0,0,0,0.6)',
+      'user-select:none',
+    ].join(';');
+
+    // Warning icon + message
+    const msg = document.createElement('span');
+    msg.textContent = '⚠️  High memory usage (' + usedMB + ' MB) — a page reload will clear it';
+    warn.appendChild(msg);
+
+    // Reload button
+    const reloadBtn = document.createElement('button');
+    reloadBtn.textContent = 'Reload now';
+    reloadBtn.style.cssText = [
+      'background:#f59e0b', 'color:#1a0a00', 'border:none',
+      'border-radius:4px', 'padding:3px 10px', 'font-size:11px',
+      'cursor:pointer', 'font-family:inherit', 'font-weight:600',
+      'white-space:nowrap',
+    ].join(';');
+    reloadBtn.addEventListener('click', function () { window.location.reload(); });
+    warn.appendChild(reloadBtn);
+
+    // Dismiss button
+    const dismissBtn = document.createElement('button');
+    dismissBtn.textContent = '✕';
+    dismissBtn.title = 'Dismiss for 10 minutes';
+    dismissBtn.style.cssText = [
+      'background:none', 'border:none', 'color:#f59e0b',
+      'font-size:14px', 'cursor:pointer', 'padding:0 2px', 'line-height:1',
+    ].join(';');
+    dismissBtn.addEventListener('click', function () {
+      _memSnoozedUntil = Date.now() + CFG.memSnoozeMs;
+      warn.remove();
+    });
+    warn.appendChild(dismissBtn);
+
+    document.body.appendChild(warn);
+  }
+
+  function hideMemWarning() {
+    document.getElementById('mgd-mem-warn')?.remove();
+  }
+
+  function checkMemory() {
+    if (!performance.memory) return;
+    const used = memUsedMB();
+    if (used >= CFG.memWarnMB) {
+      showMemWarning(used);
+    } else {
+      hideMemWarning();
+    }
+  }
+
+  // Start checking once the page is interactive
+  function startMemMonitor() {
+    checkMemory();
+    setInterval(checkMemory, CFG.memCheckMs);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startMemMonitor);
+  } else {
+    startMemMonitor();
   }
 
 })();
