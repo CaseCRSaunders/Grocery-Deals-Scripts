@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MGD Deal List Paginator
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.5
 // @description  Paginates the deals list on admin.mygrocerydeals.com by injecting
 //               page/size parameters into the search API POST body so the server
 //               returns only one page of results, reducing memory and render time.
@@ -314,28 +314,24 @@
 
     // Restore saved position, or default to bottom-right
     const savedPos = loadPos();
+    const baseStyle = [
+      'position:fixed',
+      'background:#1a1a2e', 'border:1px solid #0f3460', 'border-radius:8px',
+      'padding:8px 14px', 'display:flex', 'align-items:center', 'gap:8px',
+      'z-index:2147483647',
+      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+      'font-size:12px', 'color:#e0e0e0', 'box-shadow:0 4px 24px rgba(0,0,0,0.5)',
+      'user-select:none',
+    ];
     if (savedPos) {
-      ui.style.cssText = [
-        'position:fixed',
+      ui.style.cssText = baseStyle.concat([
         'left:' + savedPos.x + 'px',
         'top:'  + savedPos.y + 'px',
-        'background:#1a1a2e', 'border:1px solid #0f3460', 'border-radius:8px',
-        'padding:8px 14px', 'display:flex', 'align-items:center', 'gap:8px',
-        'z-index:2147483647',
-        'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
-        'font-size:12px', 'color:#e0e0e0', 'box-shadow:0 4px 24px rgba(0,0,0,0.5)',
-        'user-select:none', 'cursor:grab',
-      ].join(';');
+      ]).join(';');
     } else {
-      ui.style.cssText = [
-        'position:fixed', 'bottom:20px', 'right:20px',
-        'background:#1a1a2e', 'border:1px solid #0f3460', 'border-radius:8px',
-        'padding:8px 14px', 'display:flex', 'align-items:center', 'gap:8px',
-        'z-index:2147483647',
-        'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
-        'font-size:12px', 'color:#e0e0e0', 'box-shadow:0 4px 24px rgba(0,0,0,0.5)',
-        'user-select:none', 'cursor:grab',
-      ].join(';');
+      ui.style.cssText = baseStyle.concat([
+        'bottom:20px', 'right:20px',
+      ]).join(';');
     }
 
     function btn(label, disabled, onClick) {
@@ -365,6 +361,16 @@
     const pageLabel = totalPages !== null
       ? 'Page ' + (page + 1) + ' / ' + totalPages
       : 'Page ' + (page + 1);
+
+    // ── Drag handle (prepended so it's the leftmost element) ────────────────
+    const grip = document.createElement('span');
+    grip.title = 'Drag to move';
+    grip.textContent = '⠿';
+    grip.style.cssText = [
+      'color:#4a6fa5', 'cursor:grab', 'font-size:15px', 'line-height:1',
+      'flex-shrink:0', 'padding:0 2px', 'margin-right:-2px',
+    ].join(';');
+    ui.appendChild(grip);
 
     ui.appendChild(btn('← Prev', page === 0, function () { goToPage(page - 1); }));
     ui.appendChild(txt(rangeLabel));
@@ -410,23 +416,18 @@
     document.body.appendChild(ui);
 
     // ── Drag to move ────────────────────────────────────────────────────────
-    // Buttons/selects handle their own clicks; drag only triggers on the
-    // panel background. We track whether the pointer actually moved so that
-    // a stationary click on the background doesn't count as a drag.
-    let dragStartX, dragStartY, originLeft, originTop, didMove;
+    // All drag events are scoped to the grip handle so they never interfere
+    // with buttons or the page-size selector.
+    let dragStartX, dragStartY, originLeft, originTop;
 
-    ui.addEventListener('pointerdown', function (e) {
-      // Only drag on left-button presses on the panel itself (not its children)
+    grip.addEventListener('pointerdown', function (e) {
       if (e.button !== 0) return;
-      if (e.target !== ui) return;
-
       e.preventDefault();
-      didMove = false;
 
-      // Convert current position to explicit left/top so we can move freely
+      // Switch from bottom/right anchoring to explicit left/top
       const rect = ui.getBoundingClientRect();
-      ui.style.right  = '';
       ui.style.bottom = '';
+      ui.style.right  = '';
       ui.style.left   = rect.left + 'px';
       ui.style.top    = rect.top  + 'px';
 
@@ -435,21 +436,16 @@
       originLeft = rect.left;
       originTop  = rect.top;
 
-      ui.setPointerCapture(e.pointerId);
-      ui.style.cursor = 'grabbing';
+      grip.setPointerCapture(e.pointerId);
+      grip.style.cursor = 'grabbing';
     });
 
-    ui.addEventListener('pointermove', function (e) {
-      if (e.buttons !== 1 || dragStartX === undefined) return;
-
-      const dx = e.clientX - dragStartX;
-      const dy = e.clientY - dragStartY;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didMove = true;
-      if (!didMove) return;
+    grip.addEventListener('pointermove', function (e) {
+      if (dragStartX === undefined) return;
 
       const clamped = clampPos(
-        originLeft + dx,
-        originTop  + dy,
+        originLeft + (e.clientX - dragStartX),
+        originTop  + (e.clientY - dragStartY),
         ui.offsetWidth,
         ui.offsetHeight
       );
@@ -457,13 +453,11 @@
       ui.style.top  = clamped.y + 'px';
     });
 
-    ui.addEventListener('pointerup', function (e) {
+    grip.addEventListener('pointerup', function () {
       if (dragStartX === undefined) return;
-      ui.style.cursor = 'grab';
-      if (didMove) {
-        savePos(parseFloat(ui.style.left), parseFloat(ui.style.top));
-      }
-      dragStartX = dragStartY = undefined;
+      grip.style.cursor = 'grab';
+      savePos(parseFloat(ui.style.left), parseFloat(ui.style.top));
+      dragStartX = undefined;
     });
   }
 
