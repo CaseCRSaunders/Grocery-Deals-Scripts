@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MGD Deal List Paginator
 // @namespace    http://tampermonkey.net/
-// @version      2.3
+// @version      2.4
 // @description  Paginates the deals list on admin.mygrocerydeals.com by injecting
 //               page/size parameters into the search API POST body so the server
 //               returns only one page of results, reducing memory and render time.
@@ -269,6 +269,30 @@
     });
   };
 
+  // ── UI POSITION ───────────────────────────────────────────────────────────
+  const POS_KEY = 'mgd_dpl_pos';
+
+  function loadPos() {
+    try {
+      const raw = localStorage.getItem(POS_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  function savePos(x, y) {
+    try { localStorage.setItem(POS_KEY, JSON.stringify({ x, y })); }
+    catch (e) {}
+  }
+
+  // Clamp a position so the panel never drifts fully off-screen
+  function clampPos(x, y, w, h) {
+    const margin = 8;
+    return {
+      x: Math.max(margin, Math.min(x, window.innerWidth  - w - margin)),
+      y: Math.max(margin, Math.min(y, window.innerHeight - h - margin)),
+    };
+  }
+
   // ── PAGINATION UI ─────────────────────────────────────────────────────────
   function buildUI() {
     const existing = document.getElementById('mgd-dpl-ui');
@@ -287,15 +311,32 @@
 
     const ui = document.createElement('div');
     ui.id = 'mgd-dpl-ui';
-    ui.style.cssText = [
-      'position:fixed', 'bottom:20px', 'right:20px',
-      'background:#1a1a2e', 'border:1px solid #0f3460', 'border-radius:8px',
-      'padding:8px 14px', 'display:flex', 'align-items:center', 'gap:8px',
-      'z-index:2147483647',
-      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
-      'font-size:12px', 'color:#e0e0e0', 'box-shadow:0 4px 24px rgba(0,0,0,0.5)',
-      'user-select:none',
-    ].join(';');
+
+    // Restore saved position, or default to bottom-right
+    const savedPos = loadPos();
+    if (savedPos) {
+      ui.style.cssText = [
+        'position:fixed',
+        'left:' + savedPos.x + 'px',
+        'top:'  + savedPos.y + 'px',
+        'background:#1a1a2e', 'border:1px solid #0f3460', 'border-radius:8px',
+        'padding:8px 14px', 'display:flex', 'align-items:center', 'gap:8px',
+        'z-index:2147483647',
+        'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+        'font-size:12px', 'color:#e0e0e0', 'box-shadow:0 4px 24px rgba(0,0,0,0.5)',
+        'user-select:none', 'cursor:grab',
+      ].join(';');
+    } else {
+      ui.style.cssText = [
+        'position:fixed', 'bottom:20px', 'right:20px',
+        'background:#1a1a2e', 'border:1px solid #0f3460', 'border-radius:8px',
+        'padding:8px 14px', 'display:flex', 'align-items:center', 'gap:8px',
+        'z-index:2147483647',
+        'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+        'font-size:12px', 'color:#e0e0e0', 'box-shadow:0 4px 24px rgba(0,0,0,0.5)',
+        'user-select:none', 'cursor:grab',
+      ].join(';');
+    }
 
     function btn(label, disabled, onClick) {
       const b = document.createElement('button');
@@ -351,7 +392,6 @@
     });
     sel.addEventListener('change', function () {
       const newSize = parseInt(sel.value, 10);
-      // Changing page size resets to page 0 so we don't land mid-set
       saveState({ page: 0, pageSize: newSize, total: state.total });
       window.location.reload();
     });
@@ -368,6 +408,63 @@
     }));
 
     document.body.appendChild(ui);
+
+    // ── Drag to move ────────────────────────────────────────────────────────
+    // Buttons/selects handle their own clicks; drag only triggers on the
+    // panel background. We track whether the pointer actually moved so that
+    // a stationary click on the background doesn't count as a drag.
+    let dragStartX, dragStartY, originLeft, originTop, didMove;
+
+    ui.addEventListener('pointerdown', function (e) {
+      // Only drag on left-button presses on the panel itself (not its children)
+      if (e.button !== 0) return;
+      if (e.target !== ui) return;
+
+      e.preventDefault();
+      didMove = false;
+
+      // Convert current position to explicit left/top so we can move freely
+      const rect = ui.getBoundingClientRect();
+      ui.style.right  = '';
+      ui.style.bottom = '';
+      ui.style.left   = rect.left + 'px';
+      ui.style.top    = rect.top  + 'px';
+
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      originLeft = rect.left;
+      originTop  = rect.top;
+
+      ui.setPointerCapture(e.pointerId);
+      ui.style.cursor = 'grabbing';
+    });
+
+    ui.addEventListener('pointermove', function (e) {
+      if (e.buttons !== 1 || dragStartX === undefined) return;
+
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didMove = true;
+      if (!didMove) return;
+
+      const clamped = clampPos(
+        originLeft + dx,
+        originTop  + dy,
+        ui.offsetWidth,
+        ui.offsetHeight
+      );
+      ui.style.left = clamped.x + 'px';
+      ui.style.top  = clamped.y + 'px';
+    });
+
+    ui.addEventListener('pointerup', function (e) {
+      if (dragStartX === undefined) return;
+      ui.style.cursor = 'grab';
+      if (didMove) {
+        savePos(parseFloat(ui.style.left), parseFloat(ui.style.top));
+      }
+      dragStartX = dragStartY = undefined;
+    });
   }
 
   function goToPage(newPage) {
