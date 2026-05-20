@@ -28,10 +28,30 @@ _SSL_CTX = ssl._create_unverified_context()
 # The merchant filter is matched case-insensitively against Flipp's
 # merchant_name field so "albertsons" catches "Albertsons" etc.
 STORES = [
+    # -- Albertsons ------------------------------------------------------------
     ("Albertsons - Los Angeles (Hillhurst Ave)",  "90029", "albertsons"),
     ("Albertsons - Los Angeles (Crenshaw Blvd)",  "90016", "albertsons"),
     ("Albertsons - El Paso (Mesa St)",            "79912", "albertsons"),
     ("Albertsons - El Paso (Montana Ave)",        "79902", "albertsons"),
+
+    # -- Carrs (Alaska) --------------------------------------------------------
+    ("Carrs - Anchorage (Huffman Rd)",            "99515", "carrs"),
+    ("Carrs - Anchorage (W Northern Lights Blvd)","99517", "carrs"),
+    ("Carrs - Anchorage (Abbott Rd)",             "99507", "carrs"),
+    ("Carrs - Anchorage (Seward Hwy)",            "99503", "carrs"),
+    ("Carrs - Anchorage (W Dimond Blvd)",         "99502", "carrs"),
+    ("Carrs - Anchorage (Debarr Rd)",             "99504", "carrs"),
+    ("Carrs - Anchorage (E Northern Lights Blvd)","99504", "carrs"),
+    ("Carrs - Palmer",                            "99645", "carrs"),
+    ("Carrs - Wasilla",                           "99654", "carrs"),
+
+    # -- Safeway ---------------------------------------------------------------
+    ("Safeway - Oakland (Broadway) #3132",        "94611", "safeway"),
+    ("Safeway - Denver (Federal Blvd) #1635",     "80211", "safeway"),
+    ("Safeway - Grand Junction (Broadway) #897",  "81507", "safeway"),
+    ("Safeway - Honolulu (Pali Hwy) #203",        "96813", "safeway"),
+    ("Safeway - San Francisco (16th St) #1490",   "94103", "safeway"),
+    ("Safeway - Seattle (15th Ave NE) #1586",     "98125", "safeway"),
 ]
 
 # -- SEARCH TERMS --------------------------------------------------------------
@@ -39,6 +59,7 @@ STORES = [
 DEFAULT_QUERIES = [
     "reser's potato salad",
     "reser's macaroni salad",
+    "reser's salad",
 ]
 
 # -- FLIPP API -----------------------------------------------------------------
