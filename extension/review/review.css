@@ -156,6 +156,54 @@ tr.removed td   { text-decoration: line-through; opacity: 0.4; }
 /* ── Flags column icons ── */
 .flags { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 
+/* ── Clone panel ── */
+.hidden { display: none !important; }
+
+.btn-clone-trigger {
+  margin-left: auto;
+  background: #e8eaf6;
+  color: #283593;
+  border: none;
+}
+.btn-clone-trigger:hover { background: #c5cae9; }
+
+.clone-panel {
+  background: #f0f4ff;
+  border: 1px solid #c5cae9;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.clone-label {
+  font-size: 12px;
+  color: #444;
+  font-weight: 500;
+}
+.clone-names {
+  width: 100%;
+  max-width: 480px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #c5cae9;
+  border-radius: 4px;
+  padding: 6px 8px;
+  resize: vertical;
+  background: #fff;
+}
+.clone-names:focus { outline: none; border-color: #1976D2; }
+.clone-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.clone-status {
+  font-size: 11px;
+  color: #2E7D32;
+}
+
 /* ── Remove button ── */
 .btn-remove {
   background: none; border: none; cursor: pointer;

@@ -11,6 +11,9 @@ const btnSetFlyer   = document.getElementById('btn-set-flyer');
 const flyerUrlEl    = document.getElementById('flyer-url');
 const btnParse      = document.getElementById('btn-parse');
 const parseStatus   = document.getElementById('parse-status');
+const ocrProgress   = document.getElementById('ocr-progress');
+const ocrLabel      = document.getElementById('ocr-label');
+const ocrBar        = document.getElementById('ocr-bar');
 const reviewBanner  = document.getElementById('review-banner');
 const reviewReason  = document.getElementById('review-reason');
 const btnResume     = document.getElementById('btn-resume');
@@ -160,6 +163,23 @@ btnClearQueue.addEventListener('click', async () => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'AUTOMATION_COMPLETE') {
     setStateBadge('idle');
+    refreshState();
+  }
+
+  if (msg.type === 'OCR_PROGRESS') {
+    const pct = Math.round(((msg.page - 1 + msg.progress) / msg.totalPages) * 100);
+    const stageText = msg.stage === 'rendering' ? 'rendering…'
+                    : msg.stage === 'recognizing' ? `${Math.round(msg.progress * 100)}%`
+                    : '…';
+    ocrLabel.textContent = `OCR: Page ${msg.page} of ${msg.totalPages} — ${stageText}`;
+    ocrBar.style.width   = `${pct}%`;
+    ocrProgress.classList.remove('hidden');
+    parseStatus.classList.add('hidden');
+  }
+
+  if (msg.type === 'QUEUE_UPDATED') {
+    ocrProgress.classList.add('hidden');
+    ocrBar.style.width = '0%';
     refreshState();
   }
 });

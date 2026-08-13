@@ -1,5 +1,16 @@
 'use strict';
 
+// ── Background messaging ──────────────────────────────────────────────────────
+
+function sendBg(msg) {
+  return new Promise(resolve => {
+    chrome.runtime.sendMessage(msg, response => {
+      if (chrome.runtime.lastError) resolve(null);
+      else resolve(response);
+    });
+  });
+}
+
 // ── Load queue from storage ───────────────────────────────────────────────────
 
 async function loadQueue() {
@@ -42,10 +53,21 @@ function buildStoreSection(store) {
   const dealCount = store.deals?.length ?? 0;
   const flagged   = store.deals?.filter(d => d.needsUOMReview || d.limitNeedsReview).length ?? 0;
 
+  const clonedNote = store.clonedFrom ? ` · cloned from ${escHtml(store.clonedFrom)}` : '';
   section.innerHTML = `
     <div class="store-header">
       <h2>${escHtml(store.storeName)}</h2>
-      <span class="store-meta">${dealCount} deals${flagged ? ` · ${flagged} flagged` : ''}</span>
+      <span class="store-meta">${dealCount} deals${flagged ? ` · ${flagged} flagged` : ''}${clonedNote}</span>
+      <button class="btn small secondary btn-clone-trigger" title="Copy these deals to other stores">Clone to Stores…</button>
+    </div>
+    <div class="clone-panel hidden">
+      <label class="clone-label">Enter store names to copy these ${dealCount} deals to (one per line):</label>
+      <textarea class="clone-names" rows="4" placeholder="Store Name A&#10;Store Name B&#10;Store Name C"></textarea>
+      <div class="clone-actions">
+        <button class="btn small primary btn-clone-confirm">Create Clones</button>
+        <button class="btn small secondary btn-clone-cancel">Cancel</button>
+        <span class="clone-status"></span>
+      </div>
     </div>
   `;
 
@@ -57,6 +79,7 @@ function buildStoreSection(store) {
       <col class="col-product">
       <col class="col-brand">
       <col class="col-size">
+      <col class="col-uom">
       <col class="col-type">
       <col class="col-price">
       <col class="col-tags">
@@ -69,6 +92,7 @@ function buildStoreSection(store) {
         <th>Product</th>
         <th>Brand</th>
         <th>Size</th>
+        <th>UoM</th>
         <th>Sale Type</th>
         <th>Price</th>
         <th>Tags</th>
@@ -85,6 +109,37 @@ function buildStoreSection(store) {
   }
 
   section.appendChild(table);
+
+  // ── Clone panel wiring ──────────────────────────────────────────────────────
+
+  const clonePanel   = section.querySelector('.clone-panel');
+  const cloneNames   = section.querySelector('.clone-names');
+  const cloneStatus  = section.querySelector('.clone-status');
+
+  section.querySelector('.btn-clone-trigger').addEventListener('click', () => {
+    clonePanel.classList.toggle('hidden');
+    if (!clonePanel.classList.contains('hidden')) cloneNames.focus();
+  });
+
+  section.querySelector('.btn-clone-cancel').addEventListener('click', () => {
+    clonePanel.classList.add('hidden');
+    cloneNames.value = '';
+    cloneStatus.textContent = '';
+  });
+
+  section.querySelector('.btn-clone-confirm').addEventListener('click', async () => {
+    const names = cloneNames.value.split('\n').map(n => n.trim()).filter(Boolean);
+    if (!names.length) { cloneStatus.textContent = 'Enter at least one store name.'; return; }
+    cloneStatus.textContent = 'Creating…';
+    const result = await sendBg({ type: 'CLONE_STORE_DEALS', sourceStoreId: store.id, targetStoreNames: names });
+    if (result?.success) {
+      cloneStatus.textContent = `✓ Created ${result.count} clone${result.count !== 1 ? 's' : ''} — reload this panel to see them.`;
+      cloneNames.value = '';
+    } else {
+      cloneStatus.textContent = `Error: ${result?.error ?? 'Unknown error'}`;
+    }
+  });
+
   return section;
 }
 
@@ -125,6 +180,7 @@ function buildDealRow(deal, storeId) {
     <td><span class="editable" contenteditable="true" data-field="productName">${escHtml(deal.productName ?? '')}</span></td>
     <td><span class="editable" contenteditable="true" data-field="brand">${escHtml(deal.brand ?? '')}</span></td>
     <td>${escHtml(sizeText)}</td>
+    <td><span class="editable" contenteditable="true" data-field="unitOfMeasure">${escHtml(deal.unitOfMeasure ?? '')}</span></td>
     <td><span class="type-badge type-${deal.saleType ?? 'regular'}">${escHtml(deal.saleType ?? 'regular')}</span></td>
     <td>${escHtml(priceText)}</td>
     <td><div class="tag-list">${tagHtml}</div></td>
@@ -186,7 +242,7 @@ async function removeDeal(storeId, dealId, tr) {
 async function exportCsv() {
   const queue = await loadQueue();
   const rows  = [
-    ['Store', 'Product', 'Brand', 'Size', 'Sale Type', 'Price', 'Buy Qty', 'Get Qty',
+    ['Store', 'Product', 'Brand', 'Size', 'UoM', 'Sale Type', 'Price', 'Buy Qty', 'Get Qty',
      'Min Qty Required', 'Loyalty Card', 'Coupon', 'Top Deal', 'Limit',
      'Additional Tags', 'Additional Info', 'Needs UOM Review', 'Flagged', 'Original (Spanish)'],
   ];
@@ -198,6 +254,7 @@ async function exportCsv() {
         deal.productName ?? '',
         deal.brand ?? '',
         deal.sizeMin != null ? `${deal.sizeMin}-${deal.sizeMax} ${deal.sizeUnit ?? ''}` : `${deal.size ?? ''} ${deal.sizeUnit ?? ''}`,
+        deal.unitOfMeasure ?? '',
         deal.saleType ?? '',
         deal.price ?? '',
         deal.buyQty ?? '',

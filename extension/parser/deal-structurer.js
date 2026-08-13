@@ -17,15 +17,17 @@ const SEASONAL_KEYWORDS = [
 const PRICE_PATTERNS = {
   // 4/$5, 3/$10, 2/$4
   multiSlash:    /(\d+)\s*\/\s*\$\s*(\d+(?:\.\d{1,2})?)/,
+  // 3/99¢  or  3/99 (cents implied when total < $1 per unit)
+  multiCents:    /(\d+)\s*\/\s*(\d+)¢?/,
   // $X.XX when you buy N  or  N for $X.XX
   whenYouBuy:    /(\d+)\s+for\s+\$\s*(\d+(?:\.\d{1,2})?)|when\s+you\s+buy\s+(\d+)/i,
   // Buy X Get X Free / BOGO
   buyXGetY:      /buy\s+(\d+)\s+get\s+(\d+)\s*(free)?/i,
   bogo:          /\bbogo\b|buy\s+one\s+get\s+one/i,
-  // X¢ sub-dollar
-  cents:         /\b(\d{1,2})¢/,
+  // 89¢  or  99.9¢
+  cents:         /\b(\d+(?:\.\d)?)\s*¢/,
   subDollar:     /\b0?\.(\d{2})\b/,
-  // $X.XX straight
+  // $X.XX straight (also catches $X.XX/lb — price extracted, unit ignored here)
   straight:      /\$\s*(\d+(?:\.\d{1,2})?)/,
 };
 
@@ -45,6 +47,37 @@ const MULTI_LIMIT   = /limit\s+\d+.*limit\s+\d+/i; // multiple limit clauses
 
 const SIZE_RANGE_PATTERN = /(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*(oz|lb|ct|count|fl\.?\s*oz|liter|ml|g|kg)/i;
 const SIZE_SINGLE_PATTERN = /(\d+(?:\.\d+)?)\s*(oz|lb|ct|count|fl\.?\s*oz|liter|ml|g|kg)/i;
+
+// ── Unit of Measure parser ────────────────────────────────────────────────────
+// Detects the selling unit from price-area labels ("ea", "lb", etc.) that end
+// up in conditionText.  Strips the matched token from conditionText so it
+// doesn't also appear in Additional Info.
+
+const UOM_MAP = [
+  { re: /\bper\s*lb\b|\/lb\b|\blbs?\b/i,          value: 'lb'   },
+  { re: /\bper\s*oz\b|\/oz\b|\bozs?\b/i,          value: 'oz'   },
+  { re: /\beach\b|\bea\.?\b/i,                     value: 'ea'   },
+  { re: /\bper\s*ct\b|\/ct\b|\bcts?\b|\bcount\b/i, value: 'ct'  },
+  { re: /\bper\s*kg\b|\/kg\b|\bkgs?\b/i,           value: 'kg'  },
+  { re: /\bpint\b/i,                               value: 'pint' },
+];
+
+// Returns { unitOfMeasure, conditionText } — conditionText with the UoM token removed
+function extractUoM(conditionText) {
+  if (!conditionText) return { unitOfMeasure: null, conditionText };
+  for (const { re, value } of UOM_MAP) {
+    if (re.test(conditionText)) {
+      // Remove matched tokens (standalone unit labels, not ones inside size strings)
+      const stripped = conditionText
+        .split(/,\s*/)
+        .filter(part => !re.test(part.trim()) || part.trim().length > 5)
+        .join(', ')
+        .trim();
+      return { unitOfMeasure: value, conditionText: stripped || '' };
+    }
+  }
+  return { unitOfMeasure: null, conditionText };
+}
 
 // ── Size parser ───────────────────────────────────────────────────────────────
 
@@ -70,7 +103,7 @@ function parseSize(text) {
 // ── Price / sale type parser ──────────────────────────────────────────────────
 
 function parsePriceAndType(text) {
-  // X/$Y or N for $Y
+  // X/$Y or N for $Y  — dollar amount
   const multiSlash = PRICE_PATTERNS.multiSlash.exec(text);
   if (multiSlash) {
     const qty   = parseInt(multiSlash[1]);
@@ -82,6 +115,36 @@ function parsePriceAndType(text) {
       minQtyRequired: true,
       priceDisplay:   `${qty}/$${total}`,
     };
+  }
+
+  // Split dollar price: PDF renders "$1.99" as separate items "1" + "99"
+  // giving priceText "1 99" after X-sort. Same for "4 97" → $4.97.
+  // Only match when there's no $ / ¢ already (those are handled above/below).
+  if (!text.includes('$') && !text.includes('/') && !text.includes('¢')) {
+    const splitDollar = /\b(\d{1,2})\s+(\d{2})\b/.exec(text);
+    if (splitDollar) {
+      const price = parseFloat(`${splitDollar[1]}.${splitDollar[2]}`);
+      if (price >= 1.00) { // must be ≥$1 to avoid treating "0 99" as a dollar price
+        return { saleType: 'regular', price };
+      }
+    }
+  }
+
+  // 3/99¢  or  3/99  (cents — total ÷ qty gives unit price in dollars)
+  const multiCents = PRICE_PATTERNS.multiCents.exec(text);
+  if (multiCents && !text.includes('$')) {
+    const qty        = parseInt(multiCents[1]);
+    const totalCents = parseInt(multiCents[2]);
+    // Only treat as cents if total would be < $1 per item (avoids "3/10" being parsed as 10¢ each)
+    if (totalCents < 200) {
+      return {
+        saleType:       'regular',
+        price:          parseFloat((totalCents / qty / 100).toFixed(2)),
+        minBuyQty:      qty,
+        minQtyRequired: true,
+        priceDisplay:   `${qty}/${totalCents}¢`,
+      };
+    }
   }
 
   const whenYouBuy = PRICE_PATTERNS.whenYouBuy.exec(text);
@@ -131,7 +194,20 @@ function parsePriceAndType(text) {
   // Straight price
   const straight = PRICE_PATTERNS.straight.exec(text);
   if (straight) {
-    return { saleType: 'regular', price: parseFloat(straight[1]) };
+    let price = parseFloat(straight[1]);
+    // Image-flyer OCR often drops the decimal from starburst badge prices:
+    // "$899" → $8.99, "$1799" → $17.99.  Grocery items don't cost $100+ without
+    // an explicit decimal, so divide by 100 when the matched integer is ≥100.
+    if (price >= 100 && price <= 9999 && !straight[1].includes('.')) {
+      price = price / 100;
+    }
+    return { saleType: 'regular', price };
+  }
+
+  // Bare 3-4 digit badge price with no $ prefix: "899" → $8.99, "549" → $5.49.
+  // Triggered last — only when no other pattern matched.
+  if (/^\d{3,4}$/.test(text)) {
+    return { saleType: 'regular', price: parseInt(text, 10) / 100 };
   }
 
   return { saleType: 'regular', price: null };
@@ -179,16 +255,21 @@ function parseLimit(text) {
  * @returns {Object[]} Array of structured deal objects (one per product)
  */
 function structureDeal(raw) {
+  // Extract UoM first so the stripped conditionText feeds into everything else
+  const { unitOfMeasure, conditionText: strippedCond } = extractUoM(raw.conditionText ?? '');
+
   const fullText  = [
     ...(raw.productLines ?? []),
-    raw.priceText     ?? '',
-    raw.conditionText ?? '',
+    raw.priceText   ?? '',
+    strippedCond,
   ].join(' ');
 
-  const priceInfo = parsePriceAndType(raw.priceText ?? fullText);
+  // Use || not ?? — priceText may be an empty string (not null/undefined)
+  // when the spatial parser found no price tokens, so fall back to fullText
+  const priceInfo = parsePriceAndType(raw.priceText || fullText);
   const tagInfo   = parseTags(fullText);
   const limitInfo = parseLimit(fullText);
-  const sizeInfo  = parseSize(raw.conditionText ?? fullText);
+  const sizeInfo  = parseSize(strippedCond || fullText);
 
   // Build one deal per product line (multi-brand blocks create multiple deals)
   const products = raw.productLines ?? ['Unknown Product'];
@@ -200,7 +281,7 @@ function structureDeal(raw) {
     // Build custom text from original flyer line if it contains brand-specific info
     // (used for store-brand / generic matches — Tier 3)
     const customText = priceInfo.customText
-      ?? (raw.conditionText ? buildCustomText(productLine, raw.conditionText) : '');
+      ?? (strippedCond ? buildCustomText(productLine, strippedCond) : '');
 
     return {
       id:             `${Date.now()}-${i}`,
@@ -210,6 +291,7 @@ function structureDeal(raw) {
       productName,
       brand,
       isSeasonal,
+      unitOfMeasure,  // "lb", "ea", "oz", etc. — from price-area label on flyer
       ...sizeInfo,
 
       // Sale details

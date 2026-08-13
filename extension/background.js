@@ -184,11 +184,40 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ success: true });
         break;
 
-      case 'REMOVE_FROM_QUEUE':
+      case 'REMOVE_FROM_QUEUE': {
         const queue = await getQueue();
         await saveQueue(queue.filter(s => s.id !== msg.storeId));
         sendResponse({ success: true });
         break;
+      }
+
+      case 'CLONE_STORE_DEALS': {
+        const queue = await getQueue();
+        const source = queue.find(s => s.id === msg.sourceStoreId);
+        if (!source) { sendResponse({ success: false, error: 'Source store not found' }); break; }
+        const names = (msg.targetStoreNames ?? []).map(n => n.trim()).filter(Boolean);
+        const base = Date.now();
+        for (const [i, name] of names.entries()) {
+          queue.push({
+            id:         base + i + 1,
+            storeName:  name,
+            flyerUrl:   source.flyerUrl ?? '',
+            clonedFrom: source.storeName,
+            deals:      source.deals.map((d, j) => ({
+              ...d,
+              id:     `${base}-clone-${i}-${j}`,
+              status: 'pending',
+              error:  undefined,
+            })),
+            status:  'pending',
+            addedAt: new Date().toISOString(),
+          });
+        }
+        await saveQueue(queue);
+        updateBadge(queue);
+        sendResponse({ success: true, count: names.length });
+        break;
+      }
 
       case 'START_AUTOMATION':
         runAutomation(); // intentionally not awaited — runs in background
@@ -238,6 +267,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'FLYER_PARSED':
         // Result from flyer-parser.js (web viewer) injected into flyer tab
         await handleFlyerParsed(msg.rawBlocks, msg.pageUrl);
+        sendResponse({ success: true });
+        break;
+
+      case 'OCR_PROGRESS':
+        // Forward OCR progress from offscreen document to popup
+        notifyPopup(msg);
+        sendResponse({ success: true });
+        break;
+
+      case 'OCR_LOG':
+        console.log(msg.text);
+        sendResponse({ success: true });
+        break;
+
+      case 'OCR_ERROR':
+        console.error(msg.text);
+        sendResponse({ success: true });
+        break;
+
+      case 'DEBUG_ITEMS':
+        // Debug output routed from offscreen.js (its console isn't directly visible)
+        console.log(`[GD DEBUG] medFont=${msg.medFont}  total items=${msg.totalItems}`);
+        console.log('[GD DEBUG] First 80 items (y, x, fontSize, text):');
+        (msg.items ?? []).forEach(i =>
+          console.log(`  y=${i.y}  x=${i.x}  fs=${i.fontSize}  "${i.text}"`)
+        );
         sendResponse({ success: true });
         break;
 
@@ -334,7 +389,7 @@ function structureDealsFromRaw(rawBlocks) {
       block.conditionText ?? '',
     ].join(' ');
 
-    const price   = parsePriceInfo(block.priceText ?? fullText);
+    const price   = parsePriceInfo(block.priceText || fullText); // || so empty priceText falls through
     const tags    = parseTagInfo(fullText);
     const limit   = parseLimitInfo(fullText);
     const size    = parseSizeInfo(block.conditionText ?? fullText);
@@ -358,31 +413,70 @@ function structureDealsFromRaw(rawBlocks) {
   });
 }
 
+// Helper: round price to 2 decimal places so "3.9" renders as "3.90"
+function roundPrice(p) { return Math.round(p * 100) / 100; }
+
 function parsePriceInfo(text) {
-  const t = (text ?? '').replace(/\s+/g, ' ');
+  const t = (text ?? '').replace(/\s+/g, ' ').trim();
+
+  // X/$Y  or  N for $Y
   const multiSlash = /(\d+)\s*\/\s*\$\s*(\d+(?:\.\d{1,2})?)/.exec(t);
   if (multiSlash) {
     const qty = parseInt(multiSlash[1]), total = parseFloat(multiSlash[2]);
-    return { saleType: 'regular', price: parseFloat((total/qty).toFixed(2)), minQtyRequired: true, additionalTags: [] };
+    return { saleType: 'regular', price: roundPrice(total / qty),
+             minBuyQty: qty, minQtyRequired: true, additionalTags: [] };
   }
+
+  // BOGO / Buy X Get Y
   if (/buy\s+\d+\s+get\s+\d+/i.test(t) || /\bbogo\b/i.test(t)) {
     const m = /buy\s+(\d+)\s+get\s+(\d+)/i.exec(t);
     return { saleType: 'multibuy', buyQty: parseInt(m?.[1]??'1'), getQty: parseInt(m?.[2]??'1'),
              minQtyRequired: true, additionalTags: ['basedOnRegular'] };
   }
+
+  // Split dollar price: two OCR items from the same price badge ("5 99" → $5.99).
+  // Restrict to single-digit dollars (\d not \d{1,2}) to prevent "56 29" → $56.29.
+  // Items $10+ will have an explicit "$" sign and are caught by the straight pattern.
+  if (!t.includes('$') && !t.includes('/') && !t.includes('¢')) {
+    const sd = /\b(\d)\s+(\d{2})\b/.exec(t);
+    if (sd) {
+      const price = roundPrice(parseFloat(`${sd[1]}.${sd[2]}`));
+      if (price >= 1.00) return { saleType: 'regular', price, additionalTags: [] };
+    }
+  }
+
+  // Cents: 89¢ or 0.89
   if (/\d+¢|^0?\.\d{2}$/.test(t)) {
     const c = /(\d+)¢|0?\.(\d{2})/.exec(t);
-    return { saleType: 'custom', price: c ? parseInt(c[1]||c[2])/100 : null, additionalTags: [] };
+    return { saleType: 'custom', price: c ? roundPrice(parseInt(c[1]||c[2])/100) : null, additionalTags: [] };
   }
+
+  // Straight dollar price — with OCR badge correction: "$899" → $8.99, "$1799" → $17.99.
+  // Kroger starburst badges omit the decimal; OCR reads "$8.99" as "$899".
+  // Cap at $50 (5000 pre-decimal): values above that are noise, not grocery prices.
   const straight = /\$\s*(\d+(?:\.\d{1,2})?)/.exec(t);
-  return { saleType: 'regular', price: straight ? parseFloat(straight[1]) : null, additionalTags: [] };
+  if (straight) {
+    let price = parseFloat(straight[1]);
+    if (price >= 100 && price <= 5000 && !straight[1].includes('.')) price /= 100;
+    return { saleType: 'regular', price: roundPrice(price), additionalTags: [] };
+  }
+
+  // Bare 3-4 digit badge price with no $ prefix: "899" → $8.99, "549" → $5.49.
+  // Range 100–5000 = $1.00–$50.00; anything outside is noise.
+  if (/^\d{3,4}$/.test(t)) {
+    const n = parseInt(t, 10);
+    if (n >= 100 && n <= 5000) return { saleType: 'regular', price: roundPrice(n / 100), additionalTags: [] };
+  }
+
+  return { saleType: 'regular', price: null, additionalTags: [] };
 }
 
 function parseTagInfo(text) {
-  const t = (text ?? '').toLowerCase();
+  // Strip commas so OCR conditionText ("with, card, greek") matches as "with card greek"
+  const t = (text ?? '').replace(/,\s*/g, ' ').toLowerCase();
   return {
     loyaltyCard:    /with card|loyalty|price card|membership|member price/.test(t),
-    couponRequired: /coupon|clip/.test(t),
+    couponRequired: /coupon|clip|digital deal/.test(t),
     topDeal:        /top deal|featured/.test(t),
     needsUOMReview: /butcher block|deli|bakery|per piece/.test(t),
     additionalTags: [
@@ -399,10 +493,23 @@ function parseLimitInfo(text) {
 }
 
 function parseSizeInfo(text) {
-  const range  = /(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*(oz|lb|ct)/i.exec(text ?? '');
+  const t = (text ?? '').replace(/,\s*/g, ' '); // normalise OCR comma-lists
+  const range  = /(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*(oz|lb|ct)/i.exec(t);
   if (range) return { sizeMin: parseFloat(range[1]), sizeMax: parseFloat(range[2]), sizeUnit: range[3] };
-  const single = /(\d+(?:\.\d+)?)\s*(oz|lb|ct)/i.exec(text ?? '');
+  const single = /(\d+(?:\.\d+)?)\s*(oz|lb|ct)/i.exec(t);
   if (single) return { size: parseFloat(single[1]), sizeUnit: single[2] };
+
+  // Unit of measure from price-area labels ("/lb", "/ea", "per lb", etc.)
+  const uomMap = [
+    { re: /\bper\s*lb\b|\/\s*lb\b|\blbs?\b/i,  value: 'lb'  },
+    { re: /\bper\s*oz\b|\/\s*oz\b|\bozs?\b/i,  value: 'oz'  },
+    { re: /\beach\b|\bea\.?\b|\/\s*ea\b/i,      value: 'ea'  },
+    { re: /\bper\s*ct\b|\/\s*ct\b|\bcount\b/i,  value: 'ct'  },
+    { re: /\bper\s*kg\b|\/\s*kg\b|\bkgs?\b/i,   value: 'kg'  },
+  ];
+  for (const { re, value } of uomMap) {
+    if (re.test(t)) return { unitOfMeasure: value };
+  }
   return {};
 }
 
