@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "DealEntryHub",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["C:\\Users\\CaseC\\PycharmProjects\\pythonProject\\PDF\\Kroger\\DealEntryHub.py"],
+      "port": 5000,
+      "url": "http://localhost:5000"
+    }
+  ]
+}
