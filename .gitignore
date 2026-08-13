@@ -1,0 +1,31 @@
+# --- Third-party downloads (re-fetchable, not our code) ---
+# Raw tesseract.js 7.0.0 package download (~211 MB).
+# The build actually used by the extension is vendored in extension/lib/ and IS tracked.
+tesseract.js-7.0.0/
+
+# --- Dependencies ---
+node_modules/
+
+# --- Secrets ---
+.env
+.env.local
+*.key
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# --- Editor / tooling ---
+.claude/settings.local.json
+.idea/
+.vscode/
+
+# --- OS junk ---
+Thumbs.db
+.DS_Store
+
+# Stray artifact from a script that wrote to "C:\Temp\meld_test.json"
+# with the path separators stripped. Safe to delete.
+C*meld_test.json
