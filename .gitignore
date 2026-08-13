@@ -29,3 +29,7 @@ Thumbs.db
 # Stray artifact from a script that wrote to "C:\Temp\meld_test.json"
 # with the path separators stripped. Safe to delete.
 C*meld_test.json
+
+# Cross-project inventory brief. Names the client, the full project list, and
+# local disk paths — this repo is PUBLIC, so it stays local only.
+PROJECTS_CONTEXT.md
